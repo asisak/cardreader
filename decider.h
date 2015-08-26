@@ -1,0 +1,2 @@
+
+int decide(int key);
