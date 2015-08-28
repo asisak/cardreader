@@ -1,8 +1,8 @@
 #include "decider.h"
 
 const int keys[] = {
-  0x8ec877, // blue
-  0x2ca217  // yellow
+  0x2ca217, // yellow
+  0x8ec877  // blue
 };
 
 int decide(int key) {
