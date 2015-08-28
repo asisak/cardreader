@@ -85,6 +85,7 @@ int UDPSocketClient(void) {
   puts("");
 
   // MONITORING CARD READER
+  // FIXME: 30 seconds restart
   /* WHY DOES IT READ EVEN AFTER??? */
   fprintf(stderr, "[server socket %d] waiting for badges to pass\n", myPID);
   while ( (nKey = read(sockfd, recvBuffKey, sizeof(reader_badge_pass))) > 0) {
@@ -105,11 +106,11 @@ int UDPSocketClient(void) {
     reverseEndian(recvBuffKey, nKey);
     memcpy(keys, recvBuffKey+68, 4);
     keys[5]=0;
-    unsigned int key = (unsigned char)keys[3] +  (unsigned char)keys[2] * 0x100 +  (unsigned char)keys[1] * 0x10000 +  (unsigned char)keys[0] * 0x1000000;
-    fprintf(stderr, "[server socket %d] badge key %i (0x%x) passed\n", myPID, key, key);
-    reverseEndian(keys, 4);
-    key = (unsigned char)keys[3] +  (unsigned char)keys[2] * 0x100 +  (unsigned char)keys[1] * 0x10000 +  (unsigned char)keys[0] * 0x1000000;
-    fprintf(stderr, "[server socket %d] badge key %i (0x%x) passed\n", myPID, key, key);
+    unsigned int a = ((unsigned char)keys[3] +  (unsigned char)keys[2]*0x100) +  0x10000*((unsigned char)keys[1] +  (unsigned char)keys[0]*0x100);
+    char s[8];
+    sprintf(s, "%04x%04x", a / 100000, a % 100000);
+    unsigned int key = (unsigned int)strtoul(s, NULL, 16);
+    fprintf(stderr, "[server socket %d] badge key %010u (0x%x) passed\n", myPID, key, key);
     /*
       fputs("\t  output:", stdout);
       for(int i = 0; i < n; i++) {

@@ -19,7 +19,8 @@ const char *ldap_group = "secu-test";
 
 extern pid_t myPID;
 
-int decide(int key)  {
+//  char keyString[15] = atoi(key); // = "0001925623";
+int decide(unsigned int key)  {
   LDAP *ld;
 
   fprintf(stderr, "[server auth %d] check access\n", myPID);
@@ -41,45 +42,47 @@ int decide(int key)  {
   char *attrs[2];
   attrs[0]=malloc(sizeof(char)*1024);
   attrs[1]=NULL;
-  const char *keyString = "0001925623";
 
-  sprintf(key_filter, "(x121Address=%s)", keyString); // FIXME
+  //sprintf(key_filter, "(x121Address=0001925623)");
+  sprintf(key_filter, "(x121Address=%010u)", key);
   if (ldap_search_s(ld, key_base, LDAP_SCOPE_SUBTREE, key_filter, NULL, 0, &msg) != LDAP_SUCCESS) {
      fprintf(stderr, "[server auth %d] LDAP authentication error: ", myPID);
     ldap_perror(ld, "ldap_search_s");
   }
   free(attrs[0]);
-  fprintf(stderr, "[server auth %d] %d LDAP entries returned for RFid %s\n",  myPID, ldap_count_entries(ld, msg), keyString);
-  for(entry = ldap_first_entry(ld, msg); entry != NULL; entry = ldap_next_entry(ld, entry)) {
-    char *dn = NULL;
-    if((dn = ldap_get_dn(ld, entry)) != NULL) {
-      printf("\treturned dn: %s\n", dn);
-      strcpy(uid, dn);
-      // DOES dn belong to GROUP?
-      ldap_memfree(dn);
-    }      
-  }
-  free(key_filter);
-
-  // GO FOR THE GROUP
-  char *group_filter = malloc(2048);
-  sprintf(group_filter, "(member=%s)", uid);
-  char groups_base2[512];
-  sprintf(groups_base2, "cn=%s,%s", ldap_group, groups_base);
-  fprintf(stderr, "[server auth %d] searching for %s in group %s", myPID, group_filter, groups_base2);
-  if (ldap_search_s(ld, groups_base2, LDAP_SCOPE_SUBTREE, group_filter, NULL, 0, &msg) != LDAP_SUCCESS) {
-    ldap_perror( ld, "ldap_search_s");
-  } else {
-    fprintf(stderr, "\n");
-  }
   int num_entries_returned = ldap_count_entries(ld, msg);
-  fprintf(stderr, "\t%d entries returned\n", ldap_count_entries(ld, msg));
-  free(group_filter);
-  ldap_unbind(ld);
-
+  fprintf(stderr, "[server auth %d] %d LDAP entries returned for RFid %u (%x)\n",  myPID, num_entries_returned, key, key);
   if(num_entries_returned == 1) {
-    fprintf(stderr, "[server auth %d] 'Speak, friend, and enter!' [access GRANTED]\n", myPID);
-    return 1;
+    for(entry = ldap_first_entry(ld, msg); entry != NULL; entry = ldap_next_entry(ld, entry)) {
+      char *dn = NULL;
+      if((dn = ldap_get_dn(ld, entry)) != NULL) {
+	printf("\treturned dn: %s\n", dn);
+	strcpy(uid, dn);
+	// DOES dn belong to GROUP?
+	ldap_memfree(dn);
+      }      
+    }
+    free(key_filter);
+
+    char *group_filter = malloc(2048);
+    sprintf(group_filter, "(member=%s)", uid);
+    char groups_base2[512];
+    sprintf(groups_base2, "cn=%s,%s", ldap_group, groups_base);
+    fprintf(stderr, "[server auth %d] searching for %s in group %s", myPID, group_filter, groups_base2);
+    if (ldap_search_s(ld, groups_base2, LDAP_SCOPE_SUBTREE, group_filter, NULL, 0, &msg) != LDAP_SUCCESS) {
+      ldap_perror( ld, "ldap_search_s");
+    } else {
+      fprintf(stderr, "\n");
+    }
+    num_entries_returned = ldap_count_entries(ld, msg);
+    fprintf(stderr, "\t%d entries returned\n", ldap_count_entries(ld, msg));
+    free(group_filter);
+    ldap_unbind(ld);
+    
+    if(num_entries_returned == 1) {
+      fprintf(stderr, "[server auth %d] 'Speak, friend, and enter!' [access GRANTED]\n", myPID);
+      return 1;
+    }
   }
   fprintf(stderr, "[server auth %d] 'You shall not pass!' [access REFUSED]\n", myPID);
   return 0;

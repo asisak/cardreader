@@ -1,2 +1,2 @@
 
-int decide(int key);
+int decide(unsigned int key);

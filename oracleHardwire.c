@@ -1,11 +1,11 @@
 #include "decider.h"
 
-const int keys[] = {
+const unsigned int keys[] = {
   0x2ca217, // yellow
   0x8ec877  // blue
 };
 
-int decide(int key) {
+int decide(unsigned int key) {
   for(int i = 0; i < sizeof(keys) / sizeof(int); i++) {
     if(keys[i] == key)
       return 1;
