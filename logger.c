@@ -1,9 +1,18 @@
+/* ========================================================================= */
+/* logger.h -- rfcontrol 'logger' interface                                  */
+/* ========================================================================= */
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <sys/types.h>
 
 extern pid_t myPID;
 
+/* ========================================================================= */
+/* int logprintf(const char* module, const char* format, ...);               */
+/* ------------------------------------------------------------------------- */
+/*   logs debug/error messages                                               */
+/* ========================================================================= */
 int logprintf(const char* module, const char* format, ...) {
   va_list args;
   char buf[2048];

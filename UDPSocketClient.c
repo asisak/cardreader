@@ -1,3 +1,6 @@
+/* ========================================================================= */
+/* UDPSocketClient.c -- rfcontrol UDP socket read implementation             */
+/* ========================================================================= */
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -64,58 +67,63 @@ int UDPSocketClient(void) {
   logprintf(MODULE, "socket open\n");
 
   // ENABLE MONITOR MODE
-  if ( (n = write(sockfd, reader_monitor_req, sizeof(reader_monitor_req))) <  0) {
+  if ( (n = send(sockfd, reader_monitor_req, sizeof(reader_monitor_req), 0)) <  0) {
     printf("\n Write error\n");
     return 1;
   }
   // FIXME MAC address
   logprintf(MODULE, "monitor REQ message written (length %d)\n", n);
-  if( (n = read(sockfd, recvBuff, sizeof(reader_monitor_ans))) < 0) {
-    printf("\n Read error \n");      
-  }
-  logprintf(MODULE, "monitor ACK message read (length %d)\n", n);
-  recvBuff[n] = 0;
-  reverseEndian(reader_monitor_ans, sizeof(reader_monitor_ans));
-  reverseEndian(recvBuff, n);
-  /*
-  fputs("\ttemplate: ", stdout);
-  for(int i = 0; i < sizeof(reader_monitor_ans); i++) {
-    printf("%02x:", (unsigned char)reader_monitor_ans[i]);
-  }
-  fputs("\n\t  output: ", stdout);
-  for(int i = 0; i < n; i++) {
-    printf("%02x:", (unsigned char)recvBuff[i]);
-  }
-  puts("");
-  */
-
-  // MONITORING CARD READER
-  // FIXME: 30 seconds restart
-  /* WHY DOES IT READ EVEN AFTER??? */
-  logprintf(MODULE, "waiting for badges to pass\n");
-  while ( (nKey = read(sockfd, recvBuffKey, sizeof(reader_badge_pass))) > 0) {
-    logprintf(MODULE, "badge pass message read (length %d)\n", nKey);
-    /*      
-    // DUMP DATA READ
-    fputs("\t  output: ", stdout);
-    for(int i = 0; i < n; i++) {
-    printf("%02x:", (unsigned char)recvBuff[i]);
-    }
-    puts("");
+  if( (n = recv(sockfd, recvBuff, sizeof(reader_monitor_ans), 0)) < 0) {
+    printf("\n Read error \n");
+    return -1;
+  } else if (!n) {
+    printf("\n Socket closed \n");
+    return -1;
+  } else {
+    logprintf(MODULE, "monitor ACK message read (length %d)\n", n);
+    recvBuff[n] = 0;
+    reverseEndian(reader_monitor_ans, sizeof(reader_monitor_ans));
+    reverseEndian(recvBuff, n);
+    /*
+      fputs("\ttemplate: ", stdout);
+      for(int i = 0; i < sizeof(reader_monitor_ans); i++) {
+      printf("%02x:", (unsigned char)reader_monitor_ans[i]);
+      }
+      fputs("\n\t  output: ", stdout);
+      for(int i = 0; i < n; i++) {
+      printf("%02x:", (unsigned char)recvBuff[i]);
+      }
+      puts("");
     */
-    //unsigned int key = 2925079; // yellow
-    //unsigned int key = 9357431; // blue
-    //sprintf(keys, "%c%c%c", 0x17, 0xa2, 0x2c); // yellow
-    //sprintf(keys, "%c%c%c", 0x77, 0xc8, 0x8e); // blue
-    char keys[5];
-    reverseEndian(recvBuffKey, nKey);
-    memcpy(keys, recvBuffKey+68, 4);
-    keys[5]=0;
-    unsigned int a = ((unsigned char)keys[3] +  (unsigned char)keys[2]*0x100) +  0x10000*((unsigned char)keys[1] +  (unsigned char)keys[0]*0x100);
-    char s[8];
-    sprintf(s, "%04x%04x", a / 100000, a % 100000);
-    unsigned int key = (unsigned int)strtoul(s, NULL, 16);
-    logprintf(MODULE, "badge key %010u (0x%x) passed\n", key, key);
+
+    // MONITORING CARD READER
+    // FIXME: 30 seconds restart
+    /* WHY DOES IT READ EVEN AFTER??? */
+    logprintf(MODULE, "waiting for badges to pass\n");
+    while ( (nKey = recv(sockfd, recvBuffKey, sizeof(reader_badge_pass), 0)) >= 0) {
+      // FIXME nKey == 0 --> restart socket & monitor
+      logprintf(MODULE, "badge pass message read (length %d)\n", nKey);
+      /*      
+      // DUMP DATA READ
+      fputs("\t  output: ", stdout);
+      for(int i = 0; i < n; i++) {
+      printf("%02x:", (unsigned char)recvBuff[i]);
+      }
+      puts("");
+      */
+      //unsigned int key = 2925079; // yellow
+      //unsigned int key = 9357431; // blue
+      //sprintf(keys, "%c%c%c", 0x17, 0xa2, 0x2c); // yellow
+      //sprintf(keys, "%c%c%c", 0x77, 0xc8, 0x8e); // blue
+      char keys[5];
+      reverseEndian(recvBuffKey, nKey);
+      memcpy(keys, recvBuffKey+68, 4);
+      keys[5]=0;
+      unsigned int a = ((unsigned char)keys[3] +  (unsigned char)keys[2]*0x100) +  0x10000*((unsigned char)keys[1] +  (unsigned char)keys[0]*0x100);
+      char s[8];
+      sprintf(s, "%04x%04x", a / 100000, a % 100000);
+      unsigned int key = (unsigned int)strtoul(s, NULL, 16);
+      logprintf(MODULE, "badge key %010u (0x%x) passed\n", key, key);
     /*
       fputs("\t  output:", stdout);
       for(int i = 0; i < n; i++) {
@@ -127,13 +135,13 @@ int UDPSocketClient(void) {
       
     if(decide(key)) {
       // OPEN
-      if ( (n = write(sockfd, reader_open_req1, sizeof(reader_open_req1))) <  0) {
+      if ( (n = send(sockfd, reader_open_req1, sizeof(reader_open_req1), 0)) <  0) {
 	printf("\n Write error\n");
 	return 1;
       }
       logprintf(MODULE, "open REQ message 1 written (length %d)\n", n);
 
-      if( (n = read(sockfd, recvBuff, sizeof(reader_open_ans1))) < 0) {
+      if( (n = recv(sockfd, recvBuff, sizeof(reader_open_ans1), 0)) <= 0) {
 	printf("\n Read error \n");      
       }
       logprintf(MODULE, "open ACK message 1 read (length %d)\n", n);
@@ -149,13 +157,13 @@ int UDPSocketClient(void) {
 	 puts("");
       */
 	
-      if ( (n = write(sockfd, reader_open_req2, sizeof(reader_open_req2))) <  0) {
+      if ( (n = send(sockfd, reader_open_req2, sizeof(reader_open_req2), 0)) <  0) {
 	printf("\n Write error\n");
 	return 1;
       }
       logprintf(MODULE, "open REQ message 2 written (length %d)\n", n);
 	
-      if( (n = read(sockfd, recvBuff, sizeof(reader_open_ans2))) < 0) {
+      if( (n = recv(sockfd, recvBuff, sizeof(reader_open_ans2), 0)) < 0) {
 	printf("\n Read error \n");
       }
       logprintf(MODULE, "open ACK message 2 read (length %d)\n", n);
@@ -174,13 +182,13 @@ int UDPSocketClient(void) {
       sleep(OPEN_TIME);
 
       // CLOSE
-      if ( (n = write(sockfd, reader_close_req1, sizeof(reader_close_req1))) <  0) {
+      if ( (n = send(sockfd, reader_close_req1, sizeof(reader_close_req1), 0)) <  0) {
 	printf("\n Write error\n");
 	return 1;
       }
       logprintf(MODULE, "close REQ message 1 written (length %d)\n", n);
 	
-      if( (n = read(sockfd, recvBuff, sizeof(reader_close_ans1))) < 0) {
+      if( (n = recv(sockfd, recvBuff, sizeof(reader_close_ans1), 0)) < 0) {
 	printf("\n Read error \n");      
       }
       logprintf(MODULE, "close ACK message 1 read (length %d)\n", n);
@@ -195,13 +203,13 @@ int UDPSocketClient(void) {
 		}
 		puts("");*/
 	
-      if ( (n = write(sockfd, reader_close_req2, sizeof(reader_close_req2))) <  0) {
+      if ( (n = send(sockfd, reader_close_req2, sizeof(reader_close_req2), 0)) <  0) {
 	logprintf(MODULE, "\n Write error\n");
 	return 1;
       }
       logprintf(MODULE, "close REQ message 2 written (length %d)\n", n);
 	
-      if( (n = read(sockfd, recvBuff, sizeof(reader_close_ans2))) < 0) {
+      if( (n = recv(sockfd, recvBuff, sizeof(reader_close_ans2), 0)) < 0) {
 	printf("\n Read error \n");
       }
       logprintf(MODULE, "close ACK message 2 read (length %d)\n", n);
@@ -216,12 +224,13 @@ int UDPSocketClient(void) {
 		}
 		puts("");
       */
-      return 0;
+      // return 0;
     }
   }
   if(nKey < 0) {
     printf("\n Read error \n");
   } 
+  }
 
   return 0;
 }

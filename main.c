@@ -1,3 +1,7 @@
+/* ========================================================================= */
+/* main.c -- rfcontrol entry point                                           */
+/* ========================================================================= */
+
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -7,8 +11,8 @@
 pid_t myPID = -1;
 
 int main(int ac, char **av) {
-  myPID= getpid();
-  UDPSocketClient();
+myPID= getpid();
+UDPSocketClient();
 
-  return 0;
+return 0;
 }
