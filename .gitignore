@@ -22,6 +22,8 @@
 
 # Executables
 server
+card
+converter
 
 # Debug files
 *.dSYM/

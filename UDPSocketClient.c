@@ -107,6 +107,9 @@ int UDPSocketClient(void) {
     keys[5]=0;
     unsigned int key = (unsigned char)keys[3] +  (unsigned char)keys[2] * 0x100 +  (unsigned char)keys[1] * 0x10000 +  (unsigned char)keys[0] * 0x1000000;
     fprintf(stderr, "[server socket %d] badge key %i (0x%x) passed\n", myPID, key, key);
+    reverseEndian(keys, 4);
+    key = (unsigned char)keys[3] +  (unsigned char)keys[2] * 0x100 +  (unsigned char)keys[1] * 0x10000 +  (unsigned char)keys[0] * 0x1000000;
+    fprintf(stderr, "[server socket %d] badge key %i (0x%x) passed\n", myPID, key, key);
     /*
       fputs("\t  output:", stdout);
       for(int i = 0; i < n; i++) {
