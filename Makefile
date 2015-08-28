@@ -1,9 +1,9 @@
 CC=gcc
 CFLAGS=-c -Wall -std=c99
 LDFLAGS=-lldap -llber
-SOURCES=main.c oracleLDAP.c UDPSocketClient.c
+SOURCES=main.c oracleLDAP.c UDPSocketClient.c logger.c
 OBJECTS=$(SOURCES:.c=.o)
-EXECUTABLE=server
+EXECUTABLE=rfcontrol-server
 
 all: $(SOURCES) $(EXECUTABLE)
 

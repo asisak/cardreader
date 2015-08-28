@@ -13,6 +13,7 @@
 #include <endian.h>
 
 #include "reader.h"
+#include "logger.h"
 #include "oracle.h"
 
 #define SERVER_UDP_PORT 60000
@@ -21,7 +22,8 @@
 #define TIMEOUT 30
 #define OPEN_TIME 3
 
-extern pid_t myPID;
+#define MODULE _rfcontrol_module_socket
+const char *_rfcontrol_module_socket = "UDP socket";
 
 int reverseEndian(char* buf, int n) {
   if(n%4) return 1;
@@ -59,21 +61,23 @@ int UDPSocketClient(void) {
     printf("\n Error : Connect Failed \n");
     return 1;
   } 
-  fprintf(stderr, "[server socket %d] socket open\n", myPID);
+  logprintf(MODULE, "socket open\n");
 
   // ENABLE MONITOR MODE
   if ( (n = write(sockfd, reader_monitor_req, sizeof(reader_monitor_req))) <  0) {
     printf("\n Write error\n");
     return 1;
   }
-  fprintf(stderr, "[server socket %d] monitor REQ message written (length %d)\n", myPID, n);
+  // FIXME MAC address
+  logprintf(MODULE, "monitor REQ message written (length %d)\n", n);
   if( (n = read(sockfd, recvBuff, sizeof(reader_monitor_ans))) < 0) {
     printf("\n Read error \n");      
   }
-  fprintf(stderr, "[server socket %d] monitor ACK message read (length %d)\n", myPID, n);
+  logprintf(MODULE, "monitor ACK message read (length %d)\n", n);
   recvBuff[n] = 0;
   reverseEndian(reader_monitor_ans, sizeof(reader_monitor_ans));
   reverseEndian(recvBuff, n);
+  /*
   fputs("\ttemplate: ", stdout);
   for(int i = 0; i < sizeof(reader_monitor_ans); i++) {
     printf("%02x:", (unsigned char)reader_monitor_ans[i]);
@@ -83,13 +87,14 @@ int UDPSocketClient(void) {
     printf("%02x:", (unsigned char)recvBuff[i]);
   }
   puts("");
+  */
 
   // MONITORING CARD READER
   // FIXME: 30 seconds restart
   /* WHY DOES IT READ EVEN AFTER??? */
-  fprintf(stderr, "[server socket %d] waiting for badges to pass\n", myPID);
+  logprintf(MODULE, "waiting for badges to pass\n");
   while ( (nKey = read(sockfd, recvBuffKey, sizeof(reader_badge_pass))) > 0) {
-    fprintf(stderr, "[server socket %d] badge pass message read (length %d)\n", myPID, nKey);
+    logprintf(MODULE, "badge pass message read (length %d)\n", nKey);
     /*      
     // DUMP DATA READ
     fputs("\t  output: ", stdout);
@@ -110,7 +115,7 @@ int UDPSocketClient(void) {
     char s[8];
     sprintf(s, "%04x%04x", a / 100000, a % 100000);
     unsigned int key = (unsigned int)strtoul(s, NULL, 16);
-    fprintf(stderr, "[server socket %d] badge key %010u (0x%x) passed\n", myPID, key, key);
+    logprintf(MODULE, "badge key %010u (0x%x) passed\n", key, key);
     /*
       fputs("\t  output:", stdout);
       for(int i = 0; i < n; i++) {
@@ -126,12 +131,12 @@ int UDPSocketClient(void) {
 	printf("\n Write error\n");
 	return 1;
       }
-      fprintf(stderr, "[server socket %d] open REQ message 1 written (length %d)\n", myPID, n);
+      logprintf(MODULE, "open REQ message 1 written (length %d)\n", n);
 
       if( (n = read(sockfd, recvBuff, sizeof(reader_open_ans1))) < 0) {
 	printf("\n Read error \n");      
       }
-      fprintf(stderr, "[server socket %d] open ACK message 1 read (length %d)\n", myPID, n);
+      logprintf(MODULE, "open ACK message 1 read (length %d)\n", n);
       recvBuff[n] = 0;
       /* fputs("\ttemplate: ", stdout);
 	 for(int i = 0; i < sizeof(reader_open_ans1); i++) {
@@ -148,12 +153,12 @@ int UDPSocketClient(void) {
 	printf("\n Write error\n");
 	return 1;
       }
-      fprintf(stderr, "[server socket %d] open REQ message 2 written (length %d)\n", myPID, n);
+      logprintf(MODULE, "open REQ message 2 written (length %d)\n", n);
 	
       if( (n = read(sockfd, recvBuff, sizeof(reader_open_ans2))) < 0) {
 	printf("\n Read error \n");
       }
-      fprintf(stderr, "[server socket %d] open ACK message 2 read (length %d)\n", myPID, n);
+      logprintf(MODULE, "open ACK message 2 read (length %d)\n", n);
       recvBuff[n] = 0;
       /* fputs("\ttemplate: ", stdout);
 	 for(int i = 0; i < sizeof(reader_open_ans2); i++) {
@@ -165,7 +170,7 @@ int UDPSocketClient(void) {
 	 }
 	 puts("");*/
 	
-      fprintf(stderr, "[server socket %d] sleeping for %d seconds\n", myPID, OPEN_TIME);
+      logprintf(MODULE, "sleeping for %d seconds\n", OPEN_TIME);
       sleep(OPEN_TIME);
 
       // CLOSE
@@ -173,12 +178,12 @@ int UDPSocketClient(void) {
 	printf("\n Write error\n");
 	return 1;
       }
-      fprintf(stderr, "[server socket %d] close REQ message 1 written (length %d)\n", myPID, n);
+      logprintf(MODULE, "close REQ message 1 written (length %d)\n", n);
 	
       if( (n = read(sockfd, recvBuff, sizeof(reader_close_ans1))) < 0) {
 	printf("\n Read error \n");      
       }
-      fprintf(stderr, "[server socket %d] close ACK message 1 read (length %d)\n", myPID, n);
+      logprintf(MODULE, "close ACK message 1 read (length %d)\n", n);
       recvBuff[n] = 0;
       /*	fputs("\ttemplate: ", stdout);
 		for(int i = 0; i < sizeof(reader_close_ans1); i++) {
@@ -191,15 +196,15 @@ int UDPSocketClient(void) {
 		puts("");*/
 	
       if ( (n = write(sockfd, reader_close_req2, sizeof(reader_close_req2))) <  0) {
-	printf("\n Write error\n");
+	logprintf(MODULE, "\n Write error\n");
 	return 1;
       }
-      fprintf(stderr, "[server socket %d] close REQ message 2 written (length %d)\n", myPID, n);
+      logprintf(MODULE, "close REQ message 2 written (length %d)\n", n);
 	
       if( (n = read(sockfd, recvBuff, sizeof(reader_close_ans2))) < 0) {
 	printf("\n Read error \n");
       }
-      fprintf(stderr, "[server socket %d] close ACK message 2 read (length %d)\n", myPID, n);
+      logprintf(MODULE, "close ACK message 2 read (length %d)\n", n);
       /*	recvBuff[n] = 0;
 		fputs("\ttemplate: ", stdout);
 		for(int i = 0; i < sizeof(reader_close_ans2); i++) {

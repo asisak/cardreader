@@ -21,7 +21,7 @@
 *.dylib
 
 # Executables
-server
+rfcontrol-server
 card
 converter
 

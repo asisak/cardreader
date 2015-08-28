@@ -4,7 +4,11 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include "logger.h"
 #include "oracle.h"
+
+#define MODULE _rfcontrol_module_ldap
+const char *_rfcontrol_module_ldap = "LDAP auth";
 
 const char *ldap_server = "ldap://10.16.50.14";
 const char *base_dn = "dc=chemin-neuf, dc=net";
@@ -17,73 +21,62 @@ const char *key_base="cn=users,dc=chemin-neuf,dc=net";
 // CONFIG FILE
 const char *ldap_group = "secu-test";
 
-extern pid_t myPID;
-
-//  char keyString[15] = atoi(key); // = "0001925623";
 int decide(unsigned int key)  {
   LDAP *ld;
 
-  fprintf(stderr, "[server auth %d] check access\n", myPID);
-
+  logprintf(MODULE, "check access\n");
   if(ldap_initialize(&ld, ldap_server)) {
     perror( "ldap_initialize" );
     return 0;
   }
   int rc = ldap_simple_bind_s(ld, bind_dn, passwd);
   if( rc != LDAP_SUCCESS ) {
-    fprintf(stderr, "[server auth %d] ldap_simple_bind_s: %s\n", myPID, ldap_err2string(rc));
+    logprintf(MODULE, "ldap_simple_bind_s: %s\n", ldap_err2string(rc));
     return 0;
   }
-  fprintf(stderr, "[server auth %d] LDAP authentication successful\n", myPID);
+  logprintf(MODULE, "LDAP authentication successful\n");
   
   LDAPMessage *msg, *entry;
-  char *key_filter = malloc(2048);
-  char uid[2048];
+  char key_filter[512];
+  char uid[512];
   char *attrs[2];
   attrs[0]=malloc(sizeof(char)*1024);
   attrs[1]=NULL;
 
-  //sprintf(key_filter, "(x121Address=0001925623)");
   sprintf(key_filter, "(x121Address=%010u)", key);
   if (ldap_search_s(ld, key_base, LDAP_SCOPE_SUBTREE, key_filter, NULL, 0, &msg) != LDAP_SUCCESS) {
-     fprintf(stderr, "[server auth %d] LDAP authentication error: ", myPID);
-    ldap_perror(ld, "ldap_search_s");
+    logprintf(MODULE, "LDAP authentication error: %s", ldap_err2string(rc));
   }
   free(attrs[0]);
   int num_entries_returned = ldap_count_entries(ld, msg);
-  fprintf(stderr, "[server auth %d] %d LDAP entries returned for RFid %u (%x)\n",  myPID, num_entries_returned, key, key);
+  logprintf(MODULE, "%d LDAP entries returned for RFid %u (%x)\n",  num_entries_returned, key, key);
   if(num_entries_returned == 1) {
     for(entry = ldap_first_entry(ld, msg); entry != NULL; entry = ldap_next_entry(ld, entry)) {
       char *dn = NULL;
       if((dn = ldap_get_dn(ld, entry)) != NULL) {
-	printf("\treturned dn: %s\n", dn);
+	// printf("\treturned dn: %s\n", dn);
 	strcpy(uid, dn);
-	// DOES dn belong to GROUP?
 	ldap_memfree(dn);
       }      
     }
-    free(key_filter);
+  }
 
-    char *group_filter = malloc(2048);
-    sprintf(group_filter, "(member=%s)", uid);
-    char groups_base2[512];
-    sprintf(groups_base2, "cn=%s,%s", ldap_group, groups_base);
-    fprintf(stderr, "[server auth %d] searching for %s in group %s", myPID, group_filter, groups_base2);
-    if (ldap_search_s(ld, groups_base2, LDAP_SCOPE_SUBTREE, group_filter, NULL, 0, &msg) != LDAP_SUCCESS) {
-      ldap_perror( ld, "ldap_search_s");
-    } else {
-      fprintf(stderr, "\n");
-    }
+  char group_filter[512];
+  sprintf(group_filter, "(member=%s)", uid);
+  char groups_base2[512];
+  sprintf(groups_base2, "cn=%s,%s", ldap_group, groups_base);
+  logprintf(MODULE, "searching for %s in group %s\n", group_filter, groups_base2);
+  if(ldap_search_s(ld, groups_base2, LDAP_SCOPE_SUBTREE, group_filter, NULL, 0, &msg) != LDAP_SUCCESS) {
+    logprintf(MODULE, "LDAP search error: %s", ldap_err2string(rc));
+  } else {
     num_entries_returned = ldap_count_entries(ld, msg);
-    fprintf(stderr, "\t%d entries returned\n", ldap_count_entries(ld, msg));
-    free(group_filter);
     ldap_unbind(ld);
     
     if(num_entries_returned == 1) {
-      fprintf(stderr, "[server auth %d] 'Speak, friend, and enter!' [access GRANTED]\n", myPID);
+      logprintf(MODULE, "'Speak, friend, and enter!' [access GRANTED]\n");
       return 1;
     }
   }
-  fprintf(stderr, "[server auth %d] 'You shall not pass!' [access REFUSED]\n", myPID);
+  logprintf(MODULE, "'You shall not pass!' [access REFUSED]\n");
   return 0;
 }
