@@ -13,7 +13,7 @@
 #include <endian.h>
 
 #include "reader.h"
-#include "decider.h"
+#include "oracle.h"
 
 #define SERVER_UDP_PORT 60000
 #define SERVER_IP_ADDR "192.168.1.100"

@@ -10,5 +10,6 @@ int decide(int key) {
     if(keys[i] == key)
       return 1;
   }
+  // YOU SHALL NOT PASS!
   return 0;
 }

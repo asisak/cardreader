@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-c -Wall -std=c99
 LDFLAGS=-lldap
-SOURCES=main.c deciderLDAP.c UDPSocketClient.c
+SOURCES=main.c oracleLDAP.c UDPSocketClient.c
 OBJECTS=$(SOURCES:.c=.o)
 EXECUTABLE=server
 

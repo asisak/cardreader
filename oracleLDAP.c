@@ -2,7 +2,7 @@
 #include <sys/types.h>
 #include <ldap.h>
 
-#include "decider.h"
+#include "oracle.h"
 
 const char *ldap_server = "ldap://10.16.50.14";
 const char *base_dn = "dc=chemin-neuf, dc=net";
@@ -41,7 +41,8 @@ int decide(int key)  {
 
   // fprintf(stderr, "[server auth %d] access GRANTED\n", myPID);
   // return 1;
-  
+
+  // YOU SHALL NOT PASS!
   fprintf(stderr, "[server auth %d] access REFUSED\n", myPID);
   return 0;
 }
