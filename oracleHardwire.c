@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------------- */
 /*   the keys listed in this file can enter                                  */
 /* ========================================================================= */
-#include "decider.h"
+#include "oracle.h"
 
 const unsigned int keys[] = {
   0x2ca217, // yellow
