@@ -1,16 +1,17 @@
 /* ========================================================================= */
 /* UDPSocketClient.c -- rfcontrol UDP socket read implementation             */
 /* ========================================================================= */
-#include <sys/socket.h>
-#include <sys/types.h>
+#include <arpa/inet.h> 
+#include <errno.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <unistd.h>
-#include <errno.h>
-#include <arpa/inet.h> 
 
 #define _BSD_SOURCE
 #include <endian.h>
@@ -27,11 +28,13 @@
 
 #define MODULE _rfcontrol_module_socket
 const char *_rfcontrol_module_socket = "UDP socket";
+static int sockfd = 0;
+static int _in_transaction = 0; // FIXME: not thread-safe (note: I seriously doubt we want it to be thread-safe)
 
 int reverseEndian(char* buf, int n) {
   if(n%4) return 1;
   for (int i = 0; i != n; i +=4) {
-    char i0 = buf[i], i1 = buf[i+1], i2 = buf[i+2], i3 = buf[i+3];
+    register char i0 = buf[i], i1 = buf[i+1], i2 = buf[i+2], i3 = buf[i+3];
     buf[i] = i3;
     buf[i+1] = i2;
     buf[i+2] = i1;
@@ -40,22 +43,30 @@ int reverseEndian(char* buf, int n) {
   return 0;
 }
 
-int UDPSocketClient(void) {
-  int sockfd = 0, n = 0, nKey = 0;
-  char recvBuff[2048];
-  char recvBuffKey[2048];
-  struct sockaddr_in serv_addr; 
+int convertKey(unsigned int key) {
+  char s[8] = {0,0,0,0,0,0,0,0};
+  sprintf(s, "%04x%04x", key / 100000, key % 100000);
+  return (unsigned int)strtoul(s, NULL, 16);
+}
 
-  memset(recvBuff, '0',sizeof(recvBuff));
+int activateMonitoring(void) {
+  register int n;
+  char recvBuff[2048];
+  struct sockaddr_in serv_addr;
+
+  fprintf(stderr, "sockfd=%d\n", sockfd);
+  if(sockfd > 0)
+    close(sockfd);
+  
   if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
     printf("\n Error : Could not create socket \n");
     return 1;
-  } 
-  memset(&serv_addr, '0', sizeof(serv_addr)); 
+  }
+  fprintf(stderr, "sockfd=%d\n", sockfd);
 
+  memset(&serv_addr, '0', sizeof(serv_addr)); 
   serv_addr.sin_family = AF_INET;
   serv_addr.sin_port = htons(SERVER_UDP_PORT);
-
   if(inet_pton(AF_INET, SERVER_IP_ADDR, &serv_addr.sin_addr)<=0) {
     printf("\n inet_pton error occured\n");
     return 1;
@@ -65,7 +76,7 @@ int UDPSocketClient(void) {
     return 1;
   } 
   logprintf(MODULE, "socket open\n");
-
+  
   // ENABLE MONITOR MODE
   if ( (n = send(sockfd, reader_monitor_req, sizeof(reader_monitor_req), 0)) <  0) {
     printf("\n Write error\n");
@@ -95,43 +106,52 @@ int UDPSocketClient(void) {
       }
       puts("");
     */
+    return 0;
+  }
+}
 
-    // MONITORING CARD READER
-    // FIXME: 30 seconds restart
-    /* WHY DOES IT READ EVEN AFTER??? */
-    logprintf(MODULE, "waiting for badges to pass\n");
-    while ( (nKey = recv(sockfd, recvBuffKey, sizeof(reader_badge_pass), 0)) >= 0) {
-      // FIXME nKey == 0 --> restart socket & monitor
-      logprintf(MODULE, "badge pass message read (length %d)\n", nKey);
-      /*      
-      // DUMP DATA READ
-      fputs("\t  output: ", stdout);
-      for(int i = 0; i < n; i++) {
-      printf("%02x:", (unsigned char)recvBuff[i]);
-      }
-      puts("");
-      */
-      //unsigned int key = 2925079; // yellow
-      //unsigned int key = 9357431; // blue
-      //sprintf(keys, "%c%c%c", 0x17, 0xa2, 0x2c); // yellow
-      //sprintf(keys, "%c%c%c", 0x77, 0xc8, 0x8e); // blue
-      char keys[5];
-      reverseEndian(recvBuffKey, nKey);
-      memcpy(keys, recvBuffKey+68, 4);
-      keys[5]=0;
-      unsigned int a = ((unsigned char)keys[3] +  (unsigned char)keys[2]*0x100) +  0x10000*((unsigned char)keys[1] +  (unsigned char)keys[0]*0x100);
-      char s[8];
-      sprintf(s, "%04x%04x", a / 100000, a % 100000);
-      unsigned int key = (unsigned int)strtoul(s, NULL, 16);
-      logprintf(MODULE, "badge key %010u (0x%x) passed\n", key, key);
-    /*
-      fputs("\t  output:", stdout);
-      for(int i = 0; i < n; i++) {
+void on_alarm(int signal) {
+  if(_in_transaction) {
+    return;
+  } else {
+    logprintf(MODULE, "timeout... re-activating monitoring\n");
+    _in_transaction = 1;
+    activateMonitoring();
+    _in_transaction = 0;
+  }
+}
+
+int UDPSocketClient(void) {
+  register int n = 0, nKey = 0;
+  char recvBuff[2048];
+
+  memset(recvBuff, 0, sizeof(recvBuff));
+
+  activateMonitoring();
+
+  // MONITORING CARD READER
+  signal(SIGALRM, on_alarm);
+  alarm(TIMEOUT);
+  /* WHY DOES IT READ EVEN AFTER??? */
+  logprintf(MODULE, "waiting for badges to pass\n");
+  while ( (nKey = recv(sockfd, recvBuff, sizeof(reader_badge_pass), 0)) >= 0) {
+    // FIXME nKey == 0 --> restart socket & monitor
+
+    fputs("\t  output:", stdout);
+    for(int i = 0; i < nKey; i++) {
       if(!(i%20)) printf("\n\t");
-      printf("%02x:", (unsigned char)recvBuffKey[i]);
-      }
-      puts("");
-    */
+      printf("%02x:", (unsigned char)recvBuff[i]);
+    }
+    puts("");
+    
+    logprintf(MODULE, "badge pass message read (length %d)\n", nKey);
+    
+    reverseEndian(recvBuff, nKey);
+    char keys[5] = {0,0,0,0,0};
+    memcpy(keys, recvBuff+68, 4);
+    unsigned int key = ((unsigned char)keys[3] +  (unsigned char)keys[2]*0x100) +  0x10000*((unsigned char)keys[1] +  (unsigned char)keys[0]*0x100);
+    //key = convertKey(key); // -- pas aujourd'hui bien oui à Annecy
+    logprintf(MODULE, "badge key %010u (0x%x) passed\n", key, key);
       
     if(decide(key)) {
       // OPEN
@@ -224,13 +244,13 @@ int UDPSocketClient(void) {
 		}
 		puts("");
       */
-      // return 0;
+      //return 0;
+      
     }
   }
   if(nKey < 0) {
     printf("\n Read error \n");
   } 
-  }
 
   return 0;
 }
