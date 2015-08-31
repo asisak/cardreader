@@ -6,8 +6,8 @@
 #include "oracle.h"
 
 const unsigned int keys[] = {
-  0x2ca217, // yellow
-  0x8ec877  // blue
+  1925623, // yellow
+  6152279  // blue
 };
 
 /* ========================================================================= */
