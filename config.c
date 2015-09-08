@@ -1,1 +1,6 @@
-// generate config structures from config file
+/* ========================================================================= */
+/* config.c -- read configuration files                                      */
+/* ========================================================================= */
+
+#include <libconfig.h>
+
