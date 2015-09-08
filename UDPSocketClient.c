@@ -52,30 +52,11 @@ int convertKey(unsigned int key) {
 int activateMonitoring(void) {
   register int n;
   char recvBuff[2048];
-  struct sockaddr_in serv_addr;
 
-  fprintf(stderr, "sockfd=%d\n", sockfd);
-  if(sockfd > 0)
-    close(sockfd);
+  /* fprintf(stderr, "sockfd=%d\n", sockfd); */
+  /* if(sockfd > 0) */
+  /*   close(sockfd); */
   
-  if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-    printf("\n Error : Could not create socket \n");
-    return 1;
-  }
-  fprintf(stderr, "sockfd=%d\n", sockfd);
-
-  memset(&serv_addr, '0', sizeof(serv_addr)); 
-  serv_addr.sin_family = AF_INET;
-  serv_addr.sin_port = htons(SERVER_UDP_PORT);
-  if(inet_pton(AF_INET, SERVER_IP_ADDR, &serv_addr.sin_addr)<=0) {
-    printf("\n inet_pton error occured\n");
-    return 1;
-  }
-  if( connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-    printf("\n Error : Connect Failed \n");
-    return 1;
-  } 
-  logprintf(MODULE, "socket open\n");
   
   // ENABLE MONITOR MODE
   if ( (n = send(sockfd, reader_monitor_req, sizeof(reader_monitor_req), 0)) <  0) {
@@ -110,7 +91,58 @@ int activateMonitoring(void) {
   }
 }
 
-void on_alarm(int signal) {
+int closeDoor(void) {
+  register int n;
+  char recvBuff[2048];
+  // CLOSE
+  if ( (n = send(sockfd, reader_close_req1, sizeof(reader_close_req1), 0)) <  0) {
+    printf("\n Write error\n");
+    return 1;
+  }
+  logprintf(MODULE, "close REQ message 1 written (length %d)\n", n);
+	
+  if( (n = recv(sockfd, recvBuff, sizeof(reader_close_ans1), 0)) < 0) {
+    printf("\n Read error \n");      
+    return 0;
+  }
+  logprintf(MODULE, "close ACK message 1 read (length %d)\n", n);
+  recvBuff[n] = 1;
+  /*	fputs("\ttemplate: ", stdout);
+	for(int i = 0; i < sizeof(reader_close_ans1); i++) {
+	printf("%02x:", (unsigned char)reader_close_ans1[i]);
+	}
+	fputs("\n\t  output: ", stdout);
+	for(int i = 0; i < n; i++) {
+	printf("%02x:", (unsigned char)recvBuff[i]);
+	}
+	puts("");*/
+	
+  if ( (n = send(sockfd, reader_close_req2, sizeof(reader_close_req2), 0)) <  0) {
+    logprintf(MODULE, "\n Write error\n");
+    return 1;
+  }
+  logprintf(MODULE, "close REQ message 2 written (length %d)\n", n);
+	
+  if( (n = recv(sockfd, recvBuff, sizeof(reader_close_ans2), 0)) < 0) {
+    printf("\n Read error \n");
+    return 1;
+  }
+  logprintf(MODULE, "close ACK message 2 read (length %d)\n", n);
+  /*	recvBuff[n] = 0;
+	fputs("\ttemplate: ", stdout);
+	for(int i = 0; i < sizeof(reader_close_ans2); i++) {
+	printf("%02x:", (unsigned char)reader_close_ans2[i]);
+	}
+	fputs("\n\t  output: ", stdout);
+	for(int i = 0; i < n; i++) {
+	printf("%02x:", (unsigned char)recvBuff[i]);
+	}
+	puts("");
+  */
+  return 0;
+}
+
+static void on_alarm(int signal) {
   if(_in_transaction) {
     return;
   } else {
@@ -121,17 +153,51 @@ void on_alarm(int signal) {
   }
 }
 
+static void catch_function(int signo) {
+  if(_in_transaction) {
+    return;
+  } else {
+    logprintf(MODULE, "emergency shoutdown... closing door\n");
+    _in_transaction = 1;
+  closeDoor();
+  _in_transaction = 0;
+  }
+  exit(1);
+}
+
 int UDPSocketClient(void) {
   register int n = 0, nKey = 0;
   char recvBuff[2048];
 
   memset(recvBuff, 0, sizeof(recvBuff));
 
+  if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+    printf("\n Error : Could not create socket \n");
+    return 1;
+  }
+  struct sockaddr_in serv_addr;
+  memset(&serv_addr, '0', sizeof(serv_addr)); 
+  serv_addr.sin_family = AF_INET;
+  serv_addr.sin_port = htons(SERVER_UDP_PORT);
+  if(inet_pton(AF_INET, SERVER_IP_ADDR, &serv_addr.sin_addr)<=0) {
+    printf("\n inet_pton error occured\n");
+    return 1;
+  }
+  if(connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    printf("\n Error : Connect Failed \n");
+    return 1;
+  } 
+  logprintf(MODULE, "socket open\n");
+  fprintf(stderr, "sockfd=%d\n", sockfd);
+
   activateMonitoring();
 
   // MONITORING CARD READER
+  signal(SIGINT, catch_function);
+  signal(SIGTERM, catch_function);
   signal(SIGALRM, on_alarm);
   alarm(TIMEOUT);
+
   /* WHY DOES IT READ EVEN AFTER??? */
   logprintf(MODULE, "waiting for badges to pass\n");
   while ( (nKey = recv(sockfd, recvBuff, sizeof(reader_badge_pass), 0)) >= 0) {
@@ -150,7 +216,7 @@ int UDPSocketClient(void) {
     char keys[5] = {0,0,0,0,0};
     memcpy(keys, recvBuff+68, 4);
     unsigned int key = ((unsigned char)keys[3] +  (unsigned char)keys[2]*0x100) +  0x10000*((unsigned char)keys[1] +  (unsigned char)keys[0]*0x100);
-    //key = convertKey(key); // -- pas aujourd'hui bien oui à Annecy
+    key = convertKey(key); // -- pas aujourd'hui bien oui à Annecy
     logprintf(MODULE, "badge key %010u (0x%x) passed\n", key, key);
       
     if(decide(key)) {
@@ -200,52 +266,10 @@ int UDPSocketClient(void) {
 	
       logprintf(MODULE, "sleeping for %d seconds\n", OPEN_TIME);
       sleep(OPEN_TIME);
-
-      // CLOSE
-      if ( (n = send(sockfd, reader_close_req1, sizeof(reader_close_req1), 0)) <  0) {
-	printf("\n Write error\n");
-	return 1;
-      }
-      logprintf(MODULE, "close REQ message 1 written (length %d)\n", n);
-	
-      if( (n = recv(sockfd, recvBuff, sizeof(reader_close_ans1), 0)) < 0) {
-	printf("\n Read error \n");      
-      }
-      logprintf(MODULE, "close ACK message 1 read (length %d)\n", n);
-      recvBuff[n] = 0;
-      /*	fputs("\ttemplate: ", stdout);
-		for(int i = 0; i < sizeof(reader_close_ans1); i++) {
-		printf("%02x:", (unsigned char)reader_close_ans1[i]);
-		}
-		fputs("\n\t  output: ", stdout);
-		for(int i = 0; i < n; i++) {
-		printf("%02x:", (unsigned char)recvBuff[i]);
-		}
-		puts("");*/
-	
-      if ( (n = send(sockfd, reader_close_req2, sizeof(reader_close_req2), 0)) <  0) {
-	logprintf(MODULE, "\n Write error\n");
-	return 1;
-      }
-      logprintf(MODULE, "close REQ message 2 written (length %d)\n", n);
-	
-      if( (n = recv(sockfd, recvBuff, sizeof(reader_close_ans2), 0)) < 0) {
-	printf("\n Read error \n");
-      }
-      logprintf(MODULE, "close ACK message 2 read (length %d)\n", n);
-      /*	recvBuff[n] = 0;
-		fputs("\ttemplate: ", stdout);
-		for(int i = 0; i < sizeof(reader_close_ans2); i++) {
-		printf("%02x:", (unsigned char)reader_close_ans2[i]);
-		}
-		fputs("\n\t  output: ", stdout);
-		for(int i = 0; i < n; i++) {
-		printf("%02x:", (unsigned char)recvBuff[i]);
-		}
-		puts("");
-      */
-      //return 0;
-      
+      closeDoor();
+      return 0;
+      activateMonitoring();
+      memset(recvBuff, 0, sizeof(recvBuff));
     }
   }
   if(nKey < 0) {
